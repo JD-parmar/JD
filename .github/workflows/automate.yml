@@ -1,4 +1,4 @@
-name: Generate 1 Short Video
+name: Text to Video Automation
 
 on:
   workflow_dispatch:
@@ -17,14 +17,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install dependencies (with ffmpeg)
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Generate 1 Short Video
+      - name: Generate video
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
@@ -33,7 +33,7 @@ jobs:
       - name: Upload ZIP as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: short-video
+          name: generated-videos
           path: production_package.zip
 
   upload:
@@ -43,7 +43,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: short-video
+          name: generated-videos
 
       - name: Setup Python
         uses: actions/setup-python@v5
