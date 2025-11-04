@@ -1,64 +1,32 @@
-# .github/workflows/main.yml
-name: Text to Video Automation
+name: Automated Video Generator
 
 on:
-  workflow_dispatch: # Manual trigger option
-  schedule:
-    - cron: "0 */6 * * *"  # Run every 6 hours
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
-  generate:
+  generate_videos:
+    # Linux (ubuntu-latest) पर FFmpeg पहले से स्थापित होता है, जो OpenCV और subprocess के लिए ज़रूरी है।
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
+      - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
-        
-      - name: Setup Python
+
+      - name: 🛠️ Setup Python and Dependencies
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          
-      # --- Critical Installation Step ---
-      - name: Install dependencies (ffmpeg and python packages)
+          python-version: '3.x'
+
+      # यह स्टेप सभी ज़रूरी Python लाइब्रेरीज़ को इंस्टॉल करेगा।
+      - name: 📦 Install Python Libraries
         run: |
-          # 1. Install FFmpeg (required by MoviePy)
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          # 2. Install Python dependencies
           pip install --upgrade pip
           pip install -r requirements.txt
-          
-      # --- Main Video Generation Step ---
-      - name: Generate video
-        id: video_gen # Add an ID to easily capture output
+      
+      - name: ⚙️ Run Video Automation Script
         run: |
           # NOTE: Use your actual Google Sheet's export-as-CSV link
           python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/export?format=csv"
-
-      - name: Upload ZIP as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-videos
-          path: production_package.zip
-
-  # The upload job is currently a MOCK (simulation)
-  upload:
-    runs-on: ubuntu-latest
-    needs: generate 
-    if: success() # Only run if 'generate' was successful
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-videos
-          
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-        
-      - name: Mock YouTube Upload
-        run: python automation.py upload-youtube production_package.zip
