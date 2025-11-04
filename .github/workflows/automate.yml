@@ -1,9 +1,9 @@
 name: Text to Video Automation
 
 on:
-  workflow_dispatch:    # Manual trigger
+  workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"  # Every 6 hours
+    - cron: "0 */6 * * *"  # every 6 hours
 
 jobs:
   generate:
@@ -28,7 +28,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          python automation.py "https://docs.google.com/spreadsheets/d/e/<YOUR_SHEET_ID>/pub?output=csv"
+          python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/export?format=csv"
 
       - name: Upload ZIP as artifact
         uses: actions/upload-artifact@v4
