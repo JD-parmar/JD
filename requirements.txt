@@ -1,5 +1,7 @@
+# requirements.txt
 pandas
-gtts
-moviepy
+gTTS
 requests
 Pillow
+opencv-python # OpenCV का उपयोग वीडियो फ्रेम लिखने के लिए
+mutagen # MP3 ऑडियो की अवधि जानने के लिए
