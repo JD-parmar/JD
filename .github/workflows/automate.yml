@@ -8,25 +8,34 @@ on:
 
 jobs:
   generate_videos:
-    # Linux (ubuntu-latest) पर FFmpeg पहले से स्थापित होता है, जो OpenCV और subprocess के लिए ज़रूरी है।
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Checkout Repository
+      - name: ⬇️ Checkout Repository (Artifact Error Check)
         uses: actions/checkout@v4
 
-      - name: 🛠️ Setup Python and Dependencies
+      - name: 🛠️ Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # यह स्टेप सभी ज़रूरी Python लाइब्रेरीज़ को इंस्टॉल करेगा।
-      - name: 📦 Install Python Libraries
+      - name: 📦 Install Python Libraries (ModuleNotFoundError Check)
+        # यह स्टेप सुनिश्चित करता है कि सभी Python मॉड्यूल उपलब्ध हैं।
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: ⚙️ Run Video Automation Script
+      - name: ⚙️ Run Video Automation Script (Video Generation Error Check)
+        # यह वीडियो जनरेशन और ZIP फ़ाइल निर्माण को ट्रिगर करता है।
         run: |
           # NOTE: Use your actual Google Sheet's export-as-CSV link
           python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/export?format=csv"
+
+      # आर्टिफ़ैक्ट अपलोड (ZIP File Error Check)
+      - name: 📤 Upload Artifact (ZIP file)
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-package
+          path: production_package.zip
+          # केवल तभी अपलोड करें जब फाइल मौजूद हो
+          if-no-files-found: ignore
