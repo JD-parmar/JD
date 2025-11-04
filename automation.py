@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 # Fully automated Text → Video generator for GitHub Actions
-# Updated with Robust Image Fetching (3-Step Fallback)
+# Now using OpenCV and FFmpeg for video composition (replacing moviepy)
 
 import sys
 import os
 import json
 import pandas as pd
 import zipfile
-from gtts import gTTS
-from moviepy.editor import ImageClip, AudioFileClip
+import subprocess # FFMPEG कमांड चलाने के लिए
 import requests
+import numpy as np
+import cv2 # OpenCV को आयात करें
 from PIL import Image
 from io import BytesIO
+from gtts import gTTS
+from mutagen.mp3 import MP3 # ऑडियो अवधि जानने के लिए
 
 # --- Configuration ---
 STATE_FILE_PATH = os.path.join(os.path.dirname(__file__), 'state.txt')
@@ -20,7 +23,7 @@ ZIP_FILE_NAME = "production_package.zip"
 TEMP_UPLOAD_DIR = "./temp_upload_dir"
 FALLBACK_IMAGE_PATH = "fallback.jpg" # आपको यह फाइल रिपॉजिटरी में डालनी होगी
 
-# --- Utility Functions ---
+# --- Utility Functions (read_state, write_state, generate_script - अपरिवर्तित) ---
 
 def read_state(default_index=1):
     try:
@@ -36,118 +39,148 @@ def write_state(next_index):
         f.write(str(next_index))
 
 def generate_script(topic: str, idx: int) -> str:
-    """Generates script and metadata for the video."""
     joke = f"MOCK JOKE: '{topic}' इतना मजेदार है कि AI भी हँस पड़ा!"
+    video_text = f"स्वागत है! आज हम '{topic}' पर चर्चा करेंगे।"
+    
     return (
         f"--- वीडियो स्क्रिप्ट ---\n"
-        f"विषय: {topic}\n\n"
-        f"स्वागत है! आज हम '{topic}' पर चर्चा करेंगे।\n"
+        f"विषय: {topic}\n"
+        f"वीडियो के लिए पाठ: {video_text}\n\n"
         f"कैप्शन: {topic} | Video Title: {topic} (Index {idx})\n"
         f"Tags: ai, automation, youtube, shorts\n\n"
         f"--- जोक ---\n{joke}\n"
     )
 
 def fetch_background_image(topic: str, output_file: str) -> bool:
-    """
-    Tries to fetch an image using 3 different methods.
-    Returns True if an image is successfully saved to output_file.
-    """
+    """Robust Image Fetching: 3-Step Fallback (अपरिवर्तित)"""
     image_data = None
     
-    # --- Attempt 1: Unsplash (Using only the first word for safety) ---
+    # Attempt 1: Unsplash
     search_term = topic.split(' ')[0]
     unsplash_url = f"https://source.unsplash.com/1280x720/?{search_term}"
-    print(f"INFO: Trying Unsplash URL: {unsplash_url}")
     try:
-        response = requests.get(unsplash_url, timeout=15)
+        response = requests.get(unsplash_url, timeout=10, allow_redirects=True)
         if response.status_code == 200 and 'image' in response.headers.get('Content-Type', ''):
             image_data = response.content
-            print("INFO: Successfully fetched image from Unsplash.")
-    except Exception as e:
-        print(f"WARNING: Unsplash failed ({e}). Trying fallback.")
+    except Exception:
+        pass
         
-    # --- Attempt 2: Picsum (Random Image Fallback) ---
+    # Attempt 2: Picsum
     if image_data is None:
         picsum_url = "https://picsum.photos/1280/720"
-        print(f"INFO: Trying Picsum URL: {picsum_url}")
         try:
-            response = requests.get(picsum_url, timeout=15)
+            response = requests.get(picsum_url, timeout=10)
             if response.status_code == 200 and 'image' in response.headers.get('Content-Type', ''):
                 image_data = response.content
-                print("INFO: Successfully fetched image from Picsum.")
-        except Exception as e:
-            print(f"WARNING: Picsum failed ({e}). Trying local fallback.")
+        except Exception:
+            pass
 
-    # --- Attempt 3: Local Fallback (If all online failed) ---
+    # Attempt 3: Local Fallback
     if image_data is None:
         if os.path.exists(FALLBACK_IMAGE_PATH):
-            print(f"INFO: Using local fallback image: {FALLBACK_IMAGE_PATH}")
-            # Simply copy the local fallback file
-            Image.open(FALLBACK_IMAGE_PATH).save(output_file)
-            return True
+            try:
+                img = Image.open(FALLBACK_IMAGE_PATH)
+                img.save(output_file, "jpeg") 
+                return True
+            except Exception:
+                return False
         else:
-            print(f"ERROR: All image attempts failed and local {FALLBACK_IMAGE_PATH} is missing.")
             return False
 
-    # Save the successfully fetched image (from Attempt 1 or 2)
+    # Save the successfully fetched image
     try:
         img = Image.open(BytesIO(image_data))
-        img.save(output_file)
+        img.save(output_file, "jpeg") 
         return True
-    except Exception as e:
-        print(f"CRITICAL ERROR: Could not process/save fetched image data: {e}")
+    except Exception:
         return False
 
 
 def generate_real_video(topic_text: str, output_path: str):
-    """Generate a real short video (text→voice→image→video)."""
-    bg_image_file = "bg.jpg"
+    """Generate a real short video using OpenCV and FFmpeg."""
     
-    # 1. Fetch Background Image (using robust fallback)
+    full_script_text = f"स्वागत है! आज हम '{topic_text}' पर चर्चा करेंगे।"
+    bg_image_file = "bg_temp.jpg" 
+    temp_video_path = "temp_" + output_path # ऑडियो के बिना अस्थायी वीडियो
+
+    # 1. Fetch Background Image
     if not fetch_background_image(topic_text, bg_image_file):
         print("ERROR: Aborting video generation due to image failure.")
         return False
     
     try:
         # 2. TTS
-        tts = gTTS(topic_text, lang='hi')
+        tts = gTTS(full_script_text, lang='hi')
         tts.save("voice.mp3")
 
-        # 3. Video Composition
-        audio = AudioFileClip("voice.mp3")
-        clip = ImageClip(bg_image_file).set_duration(audio.duration).set_audio(audio)
+        # 3. Video Composition (OpenCV)
+        audio_info = MP3("voice.mp3")
+        duration = audio_info.info.length
+
+        frame = cv2.imread(bg_image_file)
+        if frame is None:
+            raise Exception(f"Could not load image: {bg_image_file}")
+            
+        height, width, _ = frame.shape
+        fps = 24
         
-        clip.write_videofile(
-            output_path, 
-            fps=24, 
-            codec="libx264", 
-            audio_codec="aac",
-            logger=None # Suppress verbose MoviePy output
+        # mp4v अधिकांश Linux/GitHub Actions runners पर संगत है
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
+        video_writer = cv2.VideoWriter(temp_video_path, fourcc, fps, (width, height))
+
+        total_frames = int(duration * fps)
+        
+        for _ in range(total_frames):
+            video_writer.write(frame)
+
+        video_writer.release()
+        
+        # 4. Combine Video and Audio (FFmpeg CLI)
+        # GitHub Actions में FFmpeg पहले से स्थापित है।
+        ffmpeg_command = (
+            f"ffmpeg -y -i {temp_video_path} -i voice.mp3 -c:v copy -c:a aac "
+            f"-strict experimental -b:a 192k -shortest {output_path}"
         )
         
-        # Cleanup
+        # Subprocess का उपयोग करके कमांड चलाएँ
+        subprocess.run(
+            ffmpeg_command, 
+            shell=True, 
+            check=True, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE
+        )
+        
+        # 5. Cleanup
         os.remove("voice.mp3")
-        if os.path.exists(bg_image_file): os.remove(bg_image_file) # Clean up temp image
+        os.remove(temp_video_path)
+        if os.path.exists(bg_image_file): os.remove(bg_image_file)
         
         print(f"✅ Generated video: {output_path}")
         return True
+    
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: FFmpeg command failed. {e.stderr.decode()}")
+        return False
     except Exception as e:
-        print(f"ERROR generating video (MoviePy/gTTS stage): {e}")
+        print(f"ERROR generating video (OpenCV/FFmpeg stage): {e}")
         # Ensure cleanup even on error
         if os.path.exists("voice.mp3"): os.remove("voice.mp3")
         if os.path.exists(bg_image_file): os.remove(bg_image_file)
+        if os.path.exists(temp_video_path): os.remove(temp_video_path)
         return False
 
+# --- Pipeline Execution (run_pipeline, mock_youtube_upload, main - अपरिवर्तित) ---
 def run_pipeline(csv_url: str):
     start_index = read_state()
     videos_generated = 0
     next_index = start_index
     current_zip = ""
 
-    # Check for the local fallback image before proceeding
     if not os.path.exists(FALLBACK_IMAGE_PATH):
-        print(f"CRITICAL: Fallback image '{FALLBACK_IMAGE_PATH}' not found. Please upload a 1280x720 JPG to your GitHub repo.")
-        print(json.dumps({"videos_generated": 0, "zip_path": "", "error": f"Missing fallback image: {FALLBACK_IMAGE_PATH}"}, ensure_ascii=False))
+        error_msg = f"CRITICAL: Fallback image '{FALLBACK_IMAGE_PATH}' not found."
+        print(error_msg)
+        print(json.dumps({"videos_generated": 0, "zip_path": "", "error": error_msg}, ensure_ascii=False, indent=2))
         return
 
     try:
@@ -160,13 +193,7 @@ def run_pipeline(csv_url: str):
         return
 
     if rows.empty:
-        print("INFO: No new topics.")
-        print(json.dumps({"videos_generated": 0, "zip_path": "", "next_start_index": next_index}, ensure_ascii=False, indent=2))
-        return
-
-    # Check if we successfully fetched data, if not, handle error and exit gracefully
-    if df.empty:
-        print("INFO: CSV loaded but is empty.")
+        print(f"INFO: No new topics to process starting from index {start_index}.")
         print(json.dumps({"videos_generated": 0, "zip_path": "", "next_start_index": next_index}, ensure_ascii=False, indent=2))
         return
         
@@ -180,16 +207,19 @@ def run_pipeline(csv_url: str):
             script_name = f"script_{i}.txt"
             video_name = f"video_{i}.mp4"
 
+            if not topic or topic == "nan":
+                 print(f"WARNING: Skipping index {i} due to empty or invalid Topic.")
+                 next_index = i + 1
+                 continue
+            
             if not generate_real_video(topic, video_name):
-                # Video generation failed (likely image issue), stop and update state to try next topic next time
                 next_index = i + 1 
-                # Log failure to console output for GitHub Actions/n8n
                 print(json.dumps({
                     "videos_generated": 0, 
                     "zip_path": "", 
-                    "error": f"Video generation failed for index {i}: {topic}"
+                    "error": f"Video generation failed for index {i}: {topic}. Set state to {next_index}."
                 }, ensure_ascii=False, indent=2))
-                break # Stop processing after the first failure
+                break 
 
             zipf.writestr(script_name, script)
             zipf.write(video_name)
@@ -202,7 +232,6 @@ def run_pipeline(csv_url: str):
             break 
 
     write_state(next_index)
-    # Output result as JSON for GitHub Actions artifact and n8n
     print(json.dumps({
         "videos_generated": videos_generated,
         "zip_path": current_zip,
@@ -211,7 +240,6 @@ def run_pipeline(csv_url: str):
     }, ensure_ascii=False, indent=2))
 
 def mock_youtube_upload(zip_file_path: str):
-    # ... (Mock upload code remains the same)
     if not os.path.exists(zip_file_path):
         print("ERROR: ZIP not found.")
         return
@@ -229,7 +257,6 @@ def mock_youtube_upload(zip_file_path: str):
         if os.path.exists(TEMP_UPLOAD_DIR):
             shutil.rmtree(TEMP_UPLOAD_DIR)
 
-
 def main():
     if len(sys.argv) > 2 and sys.argv[1] == "upload-youtube":
         mock_youtube_upload(sys.argv[2])
@@ -242,4 +269,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
