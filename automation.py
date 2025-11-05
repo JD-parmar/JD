@@ -1,208 +1,155 @@
-# -*- coding: utf-8 -*-
-# Final Automated Text -> Video Generator for GitHub Actions
-# Author: JD Automation
-# Uses: pandas, gTTS, requests, Pillow, opencv-python, mutagen
-
-import sys, os, json, time, zipfile, subprocess
+import os
+import sys
+import csv
+import json
 import pandas as pd
 import requests
-import numpy as np
-import cv2
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
 from gtts import gTTS
+from PIL import Image
+import cv2
 from mutagen.mp3 import MP3
+import numpy as np
 
-# --- Configuration ---
-STATE_FILE_PATH = os.path.join(os.path.dirname(__file__), 'state.txt')
-MAX_ITEMS_TO_PROCESS = 1
-ZIP_FILE_NAME = "production_package.zip"
-FALLBACK_IMAGE_PATH = "fallback.jpg"
-TEMP_VOICE_FILE = "voice.mp3"
-TEMP_IMAGE_FILE = "bg_temp.jpg"
+# ---------------------------
+# 1️⃣ Helper functions
+# ---------------------------
 
-# --- State Functions ---
-def read_state(default_index=1):
-    try:
-        if not os.path.exists(STATE_FILE_PATH):
-            return default_index
-        with open(STATE_FILE_PATH, "r") as f:
-            return int(f.read().strip())
-    except:
-        return default_index
+def read_state(state_file="state.txt"):
+    if os.path.exists(state_file):
+        with open(state_file, "r") as f:
+            return int(f.read().strip() or 0)
+    return 0
 
-def write_state(next_index):
-    try:
-        with open(STATE_FILE_PATH, "w") as f:
-            f.write(str(next_index))
-    except Exception as e:
-        print(f"ERROR writing state file: {e}")
+def write_state(index, state_file="state.txt"):
+    with open(state_file, "w") as f:
+        f.write(str(index))
 
-# --- Script Generator ---
-def generate_script(row: pd.Series, idx: int) -> tuple[str, str]:
-    problem = row.get('Creative Problem', 'एक महत्वपूर्ण समस्या')
-    case_study = row.get('Case Study', 'कोई केस स्टडी नहीं मिली')
-    prompt = row.get('Video Prompt', 'इस विषय पर गहराई से बात करें')
+# ---------------------------
+# 2️⃣ Script generator
+# ---------------------------
 
-    tts_script_content = (
-        f"नमस्ते दोस्तों! आज हम एक बहुत ही महत्वपूर्ण और दिलचस्प समस्या पर ध्यान देंगे: '{problem}'। "
-        f"कई बार हम सोचते हैं कि यह समस्या क्यों आती है, लेकिन असल कहानी हमारी केस स्टडी में है। "
-        f"हमारी गहन छानबीन के दौरान, हमने पाया कि {case_study}। "
-        f"यह दिखाता है कि समाधान हमेशा सरल नहीं होता। '{prompt}' पर आधारित यह वीडियो आपको एक नया दृष्टिकोण देगा। "
-        f"याद रखें, हर समस्या का समाधान है, बस सही नज़रिए की ज़रूरत है। "
-        f"इस पर अपनी राय कमेंट में ज़रूर दें। धन्यवाद!"
+def generate_script(creative_problem, case_study, video_prompt):
+    topic_line = f"विषय: {creative_problem}"
+    case_line = f"केस स्टडी: {case_study}"
+    script_text = (
+        f"नमस्कार! आज हम बात करेंगे {creative_problem} के बारे में। "
+        f"{case_study} का उदाहरण लेकर हम समझेंगे कि कैसे इस चुनौती का समाधान किया गया। "
+        f"{video_prompt} पर ध्यान देते हैं और जानते हैं कि हम इससे क्या सीख सकते हैं। "
+        f"धन्यवाद।"
     )
+    return f"{topic_line}\n{case_line}\n\n{script_text}", script_text
 
-    script_file_content = (
-        f"--- Video Metadata (Index {idx}) ---\n"
-        f"Title: {problem} - एक केस स्टडी\n"
-        f"Tags: shorts, youtube_shorts, {problem.replace(' ', '_')}, case_study\n\n"
-        f"--- Voiceover Script ---\n{tts_script_content}"
-    )
-    return script_file_content, tts_script_content
+# ---------------------------
+# 3️⃣ Background Image
+# ---------------------------
 
-# --- Image Fetching ---
-def create_fallback_image():
-    """Creates a 1280x720 fallback image if missing."""
-    print("INFO: Creating fallback.jpg automatically...")
-    img = Image.new('RGB', (1280, 720), color=(70, 70, 70))
-    draw = ImageDraw.Draw(img)
-    text = "Fallback Background"
-    draw.text((440, 340), text, fill=(255, 255, 255))
-    img.save(FALLBACK_IMAGE_PATH, "JPEG")
-
-def fetch_background_image(topic: str, output_file: str) -> bool:
-    image_data = None
-    search_term = topic.split(' ')[0]
-    unsplash_url = f"https://source.unsplash.com/1280x720/?{search_term}"
-
+def fetch_background_image(keyword="nature", fallback_path="fallback.jpg"):
     try:
-        response = requests.get(unsplash_url, timeout=10)
-        if response.status_code == 200 and 'image' in response.headers.get('Content-Type', ''):
-            image_data = response.content
-            time.sleep(1)
-    except:
+        url = f"https://source.unsplash.com/1280x720/?{keyword}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            with open("background.jpg", "wb") as f:
+                f.write(response.content)
+            return "background.jpg"
+    except Exception:
         pass
 
-    if image_data is None:
-        picsum_url = "https://picsum.photos/1280/720"
-        try:
-            response = requests.get(picsum_url, timeout=10)
-            if response.status_code == 200:
-                image_data = response.content
-        except:
-            pass
-
-    if image_data is None:
-        if not os.path.exists(FALLBACK_IMAGE_PATH):
-            create_fallback_image()
-        Image.open(FALLBACK_IMAGE_PATH).save(output_file, "JPEG")
-        return True
-
     try:
-        img = Image.open(BytesIO(image_data))
-        img.save(output_file, "JPEG")
-        return True
-    except:
-        return False
+        url = "https://picsum.photos/1280/720"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            with open("background.jpg", "wb") as f:
+                f.write(response.content)
+            return "background.jpg"
+    except Exception:
+        pass
 
-# --- Cleanup ---
-def cleanup_temp_files():
-    for f in [TEMP_VOICE_FILE, TEMP_IMAGE_FILE, "temp_video.mp4"]:
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except Exception as e:
-                print(f"WARNING: Cleanup failed for {f}: {e}")
+    # fallback image
+    if os.path.exists(fallback_path):
+        return fallback_path
 
-# --- Video Generator ---
-def generate_real_video(script_text_for_tts: str, topic_for_image: str, output_path: str):
-    if not fetch_background_image(topic_for_image, TEMP_IMAGE_FILE):
-        return False
+    # auto-generate fallback
+    print("⚠️ Fallback image missing — generating a placeholder.")
+    img = Image.new("RGB", (1280, 720), color=(40, 40, 40))
+    img.save(fallback_path)
+    return fallback_path
 
+# ---------------------------
+# 4️⃣ Generate Video
+# ---------------------------
+
+def generate_real_video(script_text, filename_prefix, background_path):
+    voice_path = f"{filename_prefix}_voice.mp3"
+    gTTS(script_text, lang="hi").save(voice_path)
+
+    audio = MP3(voice_path)
+    duration = audio.info.length
+    frame_rate = 30
+    total_frames = int(duration * frame_rate)
+
+    bg = cv2.imread(background_path)
+    bg = cv2.resize(bg, (1280, 720))
+
+    video_path = f"{filename_prefix}_video.avi"
+    out = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"XVID"), frame_rate, (1280, 720))
+
+    for _ in range(total_frames):
+        out.write(bg)
+    out.release()
+
+    final_video = f"{filename_prefix}.mp4"
+    os.system(f"ffmpeg -y -i {video_path} -i {voice_path} -c:v libx264 -c:a aac -shortest {final_video}")
+
+    os.remove(video_path)
+    os.remove(voice_path)
+    return final_video
+
+# ---------------------------
+# 5️⃣ Main
+# ---------------------------
+
+def main(csv_path):
     try:
-        tts = gTTS(script_text_for_tts, lang='hi')
-        tts.save(TEMP_VOICE_FILE)
+        df = pd.read_csv(csv_path)
+        start_idx = read_state()
+        total = len(df)
+        print(f"🔹 Starting from index {start_idx} of {total}")
 
-        audio_info = MP3(TEMP_VOICE_FILE)
-        duration = audio_info.info.length
+        for i in range(start_idx, total):
+            row = df.iloc[i]
+            creative_problem = str(row.get("Creative Problem", ""))
+            case_study = str(row.get("Case Study", ""))
+            video_prompt = str(row.get("Video Prompt", ""))
 
-        frame = cv2.imread(TEMP_IMAGE_FILE)
-        if frame is None:
-            raise Exception("OpenCV could not load background image")
+            script_file, script_text = generate_script(creative_problem, case_study, video_prompt)
+            background = fetch_background_image(creative_problem)
 
-        height, width, _ = frame.shape
-        fps = 24
-        total_frames = int(duration * fps)
-        video_writer = cv2.VideoWriter("temp_video.mp4", cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+            prefix = f"video_{i+1}"
+            script_path = f"{prefix}.txt"
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(script_file)
 
-        for _ in range(total_frames):
-            video_writer.write(frame)
-        video_writer.release()
+            video_path = generate_real_video(script_text, prefix, background)
 
-        ffmpeg_cmd = f"ffmpeg -y -i temp_video.mp4 -i {TEMP_VOICE_FILE} -c:v copy -c:a aac -shortest {output_path}"
-        subprocess.run(ffmpeg_cmd, shell=True, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print(f"✅ Generated {video_path}")
+            write_state(i + 1)
 
-        cleanup_temp_files()
-        print(f"✅ Generated video: {output_path} ({duration:.2f}s)")
-        return True
+        os.system("zip -r production_package.zip *.mp4 *.txt")
+
+        print(json.dumps({
+            "videos_generated": total - start_idx,
+            "zip_path": "production_package.zip",
+            "status": "success"
+        }, ensure_ascii=False))
+
     except Exception as e:
-        print(f"CRITICAL ERROR: {e}")
-        cleanup_temp_files()
-        return False
-
-# --- Pipeline ---
-def run_pipeline(csv_url: str):
-    start_index = read_state()
-    next_index = start_index
-    videos_generated = 0
-    current_zip = ZIP_FILE_NAME
-
-    try:
-        df = pd.read_csv(csv_url)
-        df['index'] = df.index + 1
-        rows = df[df['index'] >= start_index].head(MAX_ITEMS_TO_PROCESS)
-    except Exception as e:
-        print(f"ERROR loading CSV: {e}")
-        return
-
-    if rows.empty:
-        print("INFO: No new topics to process.")
-        return
-
-    with zipfile.ZipFile(current_zip, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for _, row in rows.iterrows():
-            i = row['index']
-            main_topic = str(row.get('Creative Problem', f"Auto Topic {i}"))
-            script_file_content, tts_script_content = generate_script(row, i)
-            script_name = f"script_{i}.txt"
-            video_name = f"video_{i}.mp4"
-
-            if not generate_real_video(tts_script_content, main_topic, video_name):
-                continue
-
-            zipf.writestr(script_name, script_file_content)
-            if os.path.exists(video_name):
-                zipf.write(video_name)
-                os.remove(video_name)
-
-            videos_generated += 1
-            next_index = i + 1
-            break
-
-    write_state(next_index)
-    print(json.dumps({
-        "videos_generated": videos_generated,
-        "zip_path": current_zip,
-        "next_start_index": next_index
-    }, ensure_ascii=False, indent=2))
-
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python automation.py <csv_url>")
-        sys.exit(1)
-    csv_url = sys.argv[1]
-    run_pipeline(csv_url)
+        print(json.dumps({
+            "error": str(e),
+            "videos_generated": 0
+        }, ensure_ascii=False))
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) < 2:
+        print("❌ Please provide CSV path or Google Sheet export link.")
+        sys.exit(1)
+    main(sys.argv[1])
