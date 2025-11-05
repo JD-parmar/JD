@@ -19,19 +19,33 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 📦 Install Dependencies
+      - name: 🧩 Install System Libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pip install --upgrade pip
+          sudo apt-get install -y \
+            libjpeg-dev \
+            zlib1g-dev \
+            libpng-dev \
+            libtiff-dev \
+            libfreetype6-dev \
+            liblcms2-dev \
+            libopenjp2-7-dev \
+            libwebp-dev \
+            tcl8.6-dev \
+            tk8.6-dev \
+            python3-tk \
+            ffmpeg
+
+      - name: 📦 Install Python Dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
-      - name: ⚙️ Run Video Automation
+      - name: ⚙️ Run Automation Script
         run: |
-          echo "Running automation.py..."
           python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/export?format=csv"
 
-      - name: 📤 Upload Artifact (ZIP)
+      - name: 📤 Upload Output ZIP
         uses: actions/upload-artifact@v4
         with:
           name: video-package
