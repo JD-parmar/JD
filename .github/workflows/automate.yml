@@ -11,31 +11,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Checkout Repository (Artifact Error Check)
+      - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
 
       - name: 🛠️ Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
-      - name: 📦 Install Python Libraries (ModuleNotFoundError Check)
-        # यह स्टेप सुनिश्चित करता है कि सभी Python मॉड्यूल उपलब्ध हैं।
+      - name: 📦 Install Dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
           pip install --upgrade pip
           pip install -r requirements.txt
-      
-      - name: ⚙️ Run Video Automation Script (Video Generation Error Check)
-        # यह वीडियो जनरेशन और ZIP फ़ाइल निर्माण को ट्रिगर करता है।
+
+      - name: ⚙️ Run Video Automation
         run: |
-          # NOTE: Use your actual Google Sheet's export-as-CSV link
+          echo "Running automation.py..."
           python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/export?format=csv"
 
-      # आर्टिफ़ैक्ट अपलोड (ZIP File Error Check)
-      - name: 📤 Upload Artifact (ZIP file)
+      - name: 📤 Upload Artifact (ZIP)
         uses: actions/upload-artifact@v4
         with:
           name: video-package
           path: production_package.zip
-          # केवल तभी अपलोड करें जब फाइल मौजूद हो
-          if-no-files-found: ignore
+          if-no-files-found: warn
