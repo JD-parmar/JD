@@ -1,6 +1,7 @@
 pandas
 gTTS
-requests
+opencv-python
 Pillow
 mutagen
-moviepy
+requests
+numpy
