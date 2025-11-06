@@ -28,6 +28,8 @@ jobs:
         run: |
           pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
+          # ✅ Ensure moviepy is installed even if missing in requirements
+          pip install moviepy
 
       - name: ⚙️ Run Automation Script
         run: |
