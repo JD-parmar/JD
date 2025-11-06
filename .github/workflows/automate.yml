@@ -1,4 +1,4 @@
-name: Automated Video Generator
+name: Automated Video Generator 🎬
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
       - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🛠️ Setup Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -22,19 +22,7 @@ jobs:
       - name: 🧩 Install System Libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libjpeg-dev \
-            zlib1g-dev \
-            libpng-dev \
-            libtiff-dev \
-            libfreetype6-dev \
-            liblcms2-dev \
-            libopenjp2-7-dev \
-            libwebp-dev \
-            tcl8.6-dev \
-            tk8.6-dev \
-            python3-tk \
-            ffmpeg
+          sudo apt-get install -y ffmpeg libsm6 libxext6
 
       - name: 📦 Install Python Dependencies
         run: |
@@ -43,6 +31,7 @@ jobs:
 
       - name: ⚙️ Run Automation Script
         run: |
+          echo "🚀 Starting animated video generation..."
           python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/export?format=csv"
 
       - name: 📤 Upload Output ZIP
@@ -50,4 +39,5 @@ jobs:
         with:
           name: video-package
           path: production_package.zip
-          if-no-files-found: warn
+          if-no-files-found: error
+          retention-days: 7
