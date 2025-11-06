@@ -27,7 +27,7 @@ jobs:
       - name: 📦 Install Python Dependencies
         run: |
           pip install --upgrade pip
-          pip install pandas gTTS opencv-python Pillow mutagen
+          pip install -r requirements.txt
 
       - name: ⚙️ Run Automation Script
         run: |
