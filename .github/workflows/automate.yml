@@ -26,15 +26,13 @@ jobs:
 
       - name: 📦 Install Python Dependencies
         run: |
-          pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt
-          # ✅ Ensure moviepy is installed even if missing in requirements
-          pip install moviepy
+          pip install --upgrade pip
+          pip install pandas gTTS opencv-python Pillow mutagen
 
       - name: ⚙️ Run Automation Script
         run: |
           echo "🚀 Starting animated video generation..."
-          python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/export?format=csv"
+          python automation.py "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/export?format=csv"
 
       - name: 📤 Upload Output ZIP
         uses: actions/upload-artifact@v4
@@ -42,4 +40,3 @@ jobs:
           name: video-package
           path: production_package.zip
           if-no-files-found: error
-          retention-days: 7
