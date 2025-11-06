@@ -2,5 +2,5 @@ pandas
 gTTS
 requests
 Pillow
-opencv-python
 mutagen
+moviepy
