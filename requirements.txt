@@ -2,7 +2,7 @@ pandas
 numpy
 gtts
 opencv-python
+Pillow
 mutagen
 requests
-Pillow
 ffmpeg-python
