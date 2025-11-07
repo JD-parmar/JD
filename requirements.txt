@@ -1,7 +1,8 @@
 pandas
-gTTS
+numpy
+gtts
 opencv-python
-Pillow
 mutagen
 requests
-numpy
+Pillow
+ffmpeg-python
