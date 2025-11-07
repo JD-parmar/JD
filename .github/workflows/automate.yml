@@ -1,6 +1,7 @@
 name: Generate Videos
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "*.csv"
