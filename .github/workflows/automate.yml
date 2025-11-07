@@ -5,6 +5,7 @@ on:
     paths:
       - "*.csv"
       - "video_generator.py"
+      - "requirements.txt"
 
 jobs:
   build:
@@ -29,7 +30,7 @@ jobs:
         run: |
           python video_generator.py sample.csv
 
-      - name: Upload results
+      - name: Upload generated videos
         uses: actions/upload-artifact@v4
         with:
           name: generated-videos
