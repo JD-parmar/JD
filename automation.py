@@ -21,7 +21,6 @@ def fetch_background(keyword="nature"):
     except Exception as e:
         print(f"[WARN] Unsplash fetch failed: {e}")
 
-    # Fallback image
     img = Image.new("RGB", (1280, 720), color=(30, 30, 30))
     img.save("background.jpg")
     return "background.jpg"
@@ -29,7 +28,6 @@ def fetch_background(keyword="nature"):
 def generate_video(script_text, filename_prefix, background_path):
     """Generate one video with Hindi narration."""
     voice_path = f"{filename_prefix}_voice.mp3"
-    print(f"Generating voice: {voice_path}")
     gTTS(script_text, lang="hi").save(voice_path)
     audio = MP3(voice_path)
     duration = audio.info.length
@@ -55,13 +53,7 @@ def generate_video(script_text, filename_prefix, background_path):
 
     final_video = f"{filename_prefix}.mp4"
     try:
-        (
-            ffmpeg
-            .input(tmp_video)
-            .input(voice_path)
-            .output(final_video, vcodec="libx264", acodec="aac", shortest=None)
-            .run(overwrite_output=True, quiet=True)
-        )
+        ffmpeg.input(tmp_video).output(voice_path, final_video, vcodec='libx264', acodec='aac', shortest=None).run(overwrite_output=True)
     except ffmpeg.Error as e:
         print("[ERROR] FFmpeg merge failed:", e.stderr.decode())
         raise e
@@ -96,18 +88,14 @@ def main(csv_path):
         except Exception as e:
             print(f"[ERROR] Video {idx+1} failed: {e}")
 
-    # Zip all generated mp4 files
-    print("\nZipping all mp4 files into production_package.zip")
-    os.system("zip -r production_package.zip *.mp4")
-
-    # Confirm zip created
-    if os.path.exists("production_package.zip"):
-        print("✅ All videos generated and zipped successfully!")
+    if any(f.endswith(".mp4") for f in os.listdir(".")):
+        os.system("zip -r production_package.zip *.mp4")
+        print("\n✅ All videos generated successfully!")
     else:
-        print("[WARN] No mp4 files found to zip.")
+        print("\n[WARN] No videos generated.")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python automation.py <your_csv_file>")
+        print("Usage: python automation.py <csv_file>")
         sys.exit(1)
     main(sys.argv[1])
