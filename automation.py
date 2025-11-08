@@ -1,156 +1,132 @@
 import os
 import sys
-import json
+import io
+import zipfile
 import pandas as pd
+import numpy as np
 from gtts import gTTS
 import cv2
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-import ffmpeg
-import zipfile
 import requests
-import io
+import ffmpeg
 
 # --- Config ---
-STATE_FILE_PATH = "state.txt"
-MAX_ITEMS_TO_PROCESS = 1
-ZIP_FILE_NAME = "production_package.zip"
-
-VIDEO_WIDTH = 640
-VIDEO_HEIGHT = 480
-FPS = 24
-DURATION = 5  # seconds per video
+STATE_FILE = "state.txt"
+ZIP_FILE = "production_package.zip"
+MAX_VIDEOS = 1
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
-# --- State Management ---
-def read_state(default=0):
-    try:
-        with open(STATE_FILE_PATH, "r") as f:
+# --- Helpers ---
+def read_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r") as f:
             return int(f.read().strip())
-    except Exception:
-        return default
+    return 1
 
-def write_state(index):
-    with open(STATE_FILE_PATH, "w") as f:
-        f.write(str(index))
+def write_state(value):
+    with open(STATE_FILE, "w") as f:
+        f.write(str(value))
 
-# --- Google Sheet CSV Fetch ---
-def fetch_google_sheet(sheet_url):
+def fetch_csv(csv_url):
     try:
-        # Convert edit URL to CSV export URL
-        if "/edit" in sheet_url:
-            sheet_id = sheet_url.split("/d/")[1].split("/")[0]
-            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
-        else:
-            csv_url = sheet_url
-
-        response = requests.get(csv_url)
-        response.raise_for_status()
-        df = pd.read_csv(io.StringIO(response.text))
-        return df
+        r = requests.get(csv_url)
+        r.raise_for_status()
+        return pd.read_csv(io.StringIO(r.text))
     except Exception as e:
-        print(f"ERROR: Failed to fetch Google Sheet: {e}")
+        print(f"ERROR: Failed to fetch CSV: {e}")
         sys.exit(1)
 
-# --- Text to Speech ---
-def text_to_speech(text, filename):
+def text_to_audio(text, filename):
     tts = gTTS(text=text, lang='en')
     tts.save(filename)
-    return filename
 
-# --- Video Frame Generation ---
-def generate_frames(text_lines):
-    frames = []
+def generate_video(text, audio_file, output_file):
+    width, height = 720, 480
+    fps = 1  # 1 frame per second for simplicity
+    duration = 5  # seconds
     font = ImageFont.truetype(FONT_PATH, 32)
-    for i in range(FPS * DURATION):
-        img = Image.new('RGB', (VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0))
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    video = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+
+    for _ in range(duration):
+        img = Image.new("RGB", (width, height), color=(50, 50, 50))
         draw = ImageDraw.Draw(img)
-        y = 50
-        for line in text_lines:
-            w, h = draw.textsize(line, font=font)
-            draw.text(((VIDEO_WIDTH-w)/2, y), line, font=font, fill=(255,255,255))
-            y += h + 20
+        draw.text((50, height // 2 - 20), text, font=font, fill=(255, 255, 255))
         frame = np.array(img)
-        frames.append(frame)
-    return frames
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        video.write(frame)
 
-# --- Video Creation ---
-def create_video(frames, video_path, audio_path=None):
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(video_path, fourcc, FPS, (VIDEO_WIDTH, VIDEO_HEIGHT))
-    for frame in frames:
-        out.write(frame)
-    out.release()
+    video.release()
 
-    if audio_path:
-        temp_path = "temp_video.mp4"
-        os.rename(video_path, temp_path)
-        ffmpeg.input(temp_path).output(audio_path, video_path, vcodec='copy', acodec='aac', strict='experimental', shortest=None).run(overwrite_output=True)
-        os.remove(temp_path)
+    # Merge audio
+    try:
+        temp_file = "temp_" + output_file
+        (
+            ffmpeg
+            .input(output_file)
+            .output(temp_file, vcodec='copy', acodec='aac', audio_bitrate='192k', shortest=None)
+            .overwrite_output()
+            .run(quiet=True)
+        )
+        (
+            ffmpeg
+            .input(temp_file)
+            .input(audio_file)
+            .output(output_file, vcodec='copy', acodec='aac', strict='experimental')
+            .overwrite_output()
+            .run(quiet=True)
+        )
+        os.remove(temp_file)
+    except Exception as e:
+        print(f"WARN: Audio merge failed: {e}")
 
-# --- Main Automation Pipeline ---
-def run_pipeline(sheet_url):
-    start_index = read_state()
-    videos_generated = 0
-    next_index = start_index
-    zip_path = ""
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python automation.py <CSV_URL>")
+        sys.exit(1)
 
-    df = fetch_google_sheet(sheet_url)
+    csv_url = sys.argv[1]
+    df = fetch_csv(csv_url)
     df['index'] = df.index + 1
-    rows_to_process = df[df['index'] > start_index].head(MAX_ITEMS_TO_PROCESS)
+    start_index = read_state()
 
-    if rows_to_process.empty:
-        return {"videos_generated": 0, "zip_path": "", "next_index": start_index}
-
-    with zipfile.ZipFile(ZIP_FILE_NAME, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for _, row in rows_to_process.iterrows():
+    videos_generated = 0
+    with zipfile.ZipFile(ZIP_FILE, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for _, row in df[df['index'] >= start_index].head(MAX_VIDEOS).iterrows():
             idx = row['index']
             topic = row['Creative Problem']
             case = row['Case Study']
             prompt = row['Video Prompt']
 
-            script_file = f"script_{idx}.txt"
-            video_file = f"video_{idx}.mp4"
+            text_content = f"Topic: {topic}\nCase: {case}\nPrompt: {prompt}"
+
             audio_file = f"voice_{idx}.mp3"
+            video_file = f"video_{idx}.mp4"
 
-            # Save script
-            script_text = f"Topic: {topic}\nCase Study: {case}\nPrompt: {prompt}"
-            with open(script_file, "w") as f:
-                f.write(script_text)
+            # Generate audio and video
+            text_to_audio(text_content, audio_file)
+            generate_video(text_content, audio_file, video_file)
 
-            # Generate voice
-            text_to_speech(script_text, audio_file)
-
-            # Generate frames
-            text_lines = [f"Topic: {topic}", f"Case: {case}", f"Prompt: {prompt}"]
-            frames = generate_frames(text_lines)
-
-            # Create video + merge audio
-            create_video(frames, video_file, audio_file)
-
-            # Add to zip
-            zipf.write(script_file)
+            # Add to ZIP
             zipf.write(video_file)
             zipf.write(audio_file)
 
             # Cleanup
-            os.remove(script_file)
             os.remove(video_file)
             os.remove(audio_file)
 
             videos_generated += 1
-            next_index = idx
-            zip_path = ZIP_FILE_NAME
-            break  # Only 1 video per run
+            start_index = idx + 1
+            break  # Only process one video at a time
 
-    write_state(next_index)
-    return {"videos_generated": videos_generated, "zip_path": zip_path, "next_index": next_index}
+    write_state(start_index)
+    print({
+        "videos_generated": videos_generated,
+        "zip_path": ZIP_FILE if videos_generated else "",
+        "next_index": start_index
+    })
 
-# --- Main ---
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python automation.py <Google_Sheet_URL>")
-        sys.exit(1)
-    sheet_url = sys.argv[1]
-    result = run_pipeline(sheet_url)
-    print(json.dumps(result))
+    main()
