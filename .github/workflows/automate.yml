@@ -1,12 +1,12 @@
 name: Generate Videos
 
 on:
-  workflow_dispatch:
   push:
     paths:
-      - "sample.csv"
+      - "*.csv"
       - "automation.py"
       - "requirements.txt"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,25 +16,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: 3.10
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg zip
+          pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run video generator
-        run: |
-          python automation.py sample.csv
+      - name: Run video generation
+        run: python automation.py sample.csv
 
-      - name: List files after video generation
+      - name: List generated files
         run: ls -lh
 
-      - name: Upload generated videos
+      - name: Upload generated videos and zip
         uses: actions/upload-artifact@v4
         with:
           name: generated-videos
