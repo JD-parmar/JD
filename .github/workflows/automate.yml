@@ -13,18 +13,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Python 3.10 (fixed from 3.1)
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: 3.10
           check-latest: true
 
-      # Step 3: Install dependencies and ffmpeg
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -32,15 +29,12 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Step 4: Run the video generation script
       - name: Run video generation
         run: python automation.py sample.csv
 
-      # Step 5: List generated files (for debugging)
       - name: List generated files
         run: ls -lh
 
-      # Step 6: Upload generated videos and zip as artifact
       - name: Upload generated videos
         uses: actions/upload-artifact@v4
         with:
