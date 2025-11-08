@@ -1,8 +1,8 @@
-pandas>=2.0.0,<3.0.0
-numpy>=1.24.0,<2.0.0
-gtts>=2.4.0,<3.0.0
-opencv-python>=4.8.0,<5.0.0
-Pillow>=10.0.0,<11.0.0
-mutagen>=1.47.0,<2.0.0
-requests>=2.31.0,<3.0.0
-ffmpeg-python>=0.2.0,<1.0.0
+pandas
+numpy
+gtts
+opencv-python
+Pillow
+mutagen
+requests
+ffmpeg-python
