@@ -3,8 +3,7 @@ name: Generate Videos
 on:
   push:
     paths:
-      - "*.csv"
-      - "automation.py"
+      - "*.py"
       - "requirements.txt"
   workflow_dispatch:
 
@@ -22,22 +21,24 @@ jobs:
           python-version: 3.11
           check-latest: true
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg zip
+          sudo apt-get install -y ffmpeg zip fonts-dejavu
+
+      - name: Install Python dependencies
+        run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run video generation
-        run: python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/edit?usp=drivesdk"
-
-      - name: List generated files
-        run: ls -lh
+      - name: Run automation script
+        run: |
+          python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/export?format=csv"
 
       - name: Upload generated videos
         uses: actions/upload-artifact@v4
         with:
           name: generated-videos
           path: |
-            *.zip
+            *.mp4
+            production_package.zip
