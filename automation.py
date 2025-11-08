@@ -36,11 +36,8 @@ def write_state(index):
 
 # --- Google Sheet CSV Fetch ---
 def fetch_google_sheet(sheet_url):
-    """
-    Converts Google Sheet URL to CSV export and reads into pandas.
-    """
     try:
-        # Convert edit URL to export CSV URL
+        # Convert edit URL to CSV export URL
         if "/edit" in sheet_url:
             sheet_id = sheet_url.split("/d/")[1].split("/")[0]
             csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
@@ -77,7 +74,7 @@ def generate_frames(text_lines):
         frames.append(frame)
     return frames
 
-# --- Video Creation using OpenCV ---
+# --- Video Creation ---
 def create_video(frames, video_path, audio_path=None):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(video_path, fourcc, FPS, (VIDEO_WIDTH, VIDEO_HEIGHT))
@@ -86,7 +83,6 @@ def create_video(frames, video_path, audio_path=None):
     out.release()
 
     if audio_path:
-        # Merge audio with ffmpeg
         temp_path = "temp_video.mp4"
         os.rename(video_path, temp_path)
         ffmpeg.input(temp_path).output(audio_path, video_path, vcodec='copy', acodec='aac', strict='experimental', shortest=None).run(overwrite_output=True)
@@ -145,7 +141,7 @@ def run_pipeline(sheet_url):
             videos_generated += 1
             next_index = idx
             zip_path = ZIP_FILE_NAME
-            break  # only 1 video per run
+            break  # Only 1 video per run
 
     write_state(next_index)
     return {"videos_generated": videos_generated, "zip_path": zip_path, "next_index": next_index}
