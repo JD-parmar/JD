@@ -6,3 +6,5 @@ Pillow
 mutagen
 requests
 ffmpeg-python
+gspread
+oauth2client
