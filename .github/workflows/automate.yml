@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: 3.10
           check-latest: true
 
       - name: Install dependencies
@@ -30,7 +30,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run video generation
-        run: python automation.py sample.csv
+        run: python automation.py "https://docs.google.com/spreadsheets/d/1kJWflnWA6BpZqyndGu4zqKXL2rlTRYBLGVOjOjXrXt0/edit?usp=drivesdk"
 
       - name: List generated files
         run: ls -lh
@@ -40,5 +40,4 @@ jobs:
         with:
           name: generated-videos
           path: |
-            *.mp4
-            production_package.zip
+            *.zip
