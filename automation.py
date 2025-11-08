@@ -14,7 +14,6 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 def fetch_background(keyword="nature"):
-    """Download a background image or create a fallback image."""
     try:
         url = f"https://source.unsplash.com/1280x720/?{keyword}"
         r = requests.get(url, timeout=10)
@@ -25,20 +24,16 @@ def fetch_background(keyword="nature"):
     except Exception as e:
         logging.warning(f"Unsplash fetch failed: {e}")
 
-    # fallback
     img = Image.new("RGB", (1280, 720), color=(30, 30, 30))
     img.save("background.jpg")
     return "background.jpg"
 
-
 def generate_video(script_text, filename_prefix, background_path):
-    """Generate one video with Hindi narration."""
     with tempfile.TemporaryDirectory() as tmpdir:
         voice_path = os.path.join(tmpdir, "voice.mp3")
         tmp_video = os.path.join(tmpdir, "temp.avi")
         final_video = f"{filename_prefix}.mp4"
 
-        # Generate voice
         gTTS(script_text, lang="hi").save(voice_path)
         audio = MP3(voice_path)
         duration = audio.info.length
@@ -62,7 +57,6 @@ def generate_video(script_text, filename_prefix, background_path):
 
         out.release()
 
-        # Merge video and audio
         (
             ffmpeg
             .input(tmp_video)
@@ -73,7 +67,6 @@ def generate_video(script_text, filename_prefix, background_path):
 
         logging.info(f"✅ Generated: {final_video}")
         return final_video
-
 
 def main(csv_path):
     if not os.path.exists(csv_path):
@@ -105,7 +98,6 @@ def main(csv_path):
 
     os.system("zip -r production_package.zip *.mp4")
     logging.info("\n✅ All videos generated successfully!")
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
