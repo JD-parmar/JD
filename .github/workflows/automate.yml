@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "*.csv"
-      - "video_generator.py"
+      - "JD/*.csv"
+      - "JD/video_generator.py"
       - "requirements.txt"
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
 
       - name: Run video generator
         run: |
-          python video_generator.py sample.csv
+          python JD/video_generator.py JD/sample.csv
 
       - name: Upload generated videos
         uses: actions/upload-artifact@v4
