@@ -8,8 +8,6 @@ from mutagen.mp3 import MP3
 import requests
 from PIL import Image
 import ffmpeg
-import zipfile
-import glob
 
 def fetch_background(keyword="nature"):
     """Download a background image or create fallback."""
@@ -70,31 +68,17 @@ def generate_video(script_text, filename_prefix, background_path):
 
     os.remove(tmp_video)
     os.remove(voice_path)
-    print(f"Created video: {final_video}")
     return final_video
 
-def zip_videos(zip_name="production_package.zip"):
-    mp4_files = glob.glob("*.mp4")
-    if not mp4_files:
-        print("[WARN] No mp4 files found to zip.")
-        return False
-
-    with zipfile.ZipFile(zip_name, "w") as zf:
-        for f in mp4_files:
-            zf.write(f)
-    print(f"Created zip archive: {zip_name}")
-    return True
-
 def main(csv_path):
-    """Read CSV and create all videos."""
     if not os.path.exists(csv_path):
         print(f"[ERROR] CSV not found: {csv_path}")
         sys.exit(1)
 
     df = pd.read_csv(csv_path)
-    required_cols = {"Creative Problem", "Case Study", "Video Prompt"}
-    if not required_cols.issubset(df.columns):
-        print(f"[ERROR] CSV must contain columns: {', '.join(required_cols)}")
+    required_columns = {"Creative Problem", "Case Study", "Video Prompt"}
+    if not required_columns.issubset(df.columns):
+        print(f"[ERROR] CSV must contain columns: {', '.join(required_columns)}")
         sys.exit(1)
 
     for idx, row in df.iterrows():
@@ -112,11 +96,15 @@ def main(csv_path):
         except Exception as e:
             print(f"[ERROR] Video {idx+1} failed: {e}")
 
-    zipped = zip_videos()
-    if not zipped:
-        print("[WARN] No videos were zipped.")
+    # Zip all generated mp4 files
+    print("\nZipping all mp4 files into production_package.zip")
+    os.system("zip -r production_package.zip *.mp4")
+
+    # Confirm zip created
+    if os.path.exists("production_package.zip"):
+        print("✅ All videos generated and zipped successfully!")
     else:
-        print("\n✅ All videos generated and zipped successfully!")
+        print("[WARN] No mp4 files found to zip.")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
