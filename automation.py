@@ -9,11 +9,14 @@ import cv2
 from PIL import Image, ImageDraw, ImageFont
 import requests
 import ffmpeg
+import random
 
 # --- Config ---
 STATE_FILE = "state.txt"
 ZIP_FILE = "production_package.zip"
-MAX_VIDEOS = 1
+VIDEO_DURATION = 60  # 60 seconds
+FPS = 10
+WIDTH, HEIGHT = 720, 480
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 # --- Helpers ---
@@ -26,12 +29,6 @@ def read_state():
 def write_state(value):
     with open(STATE_FILE, "w") as f:
         f.write(str(value))
-
-def convert_sheet_to_csv(url):
-    if "/edit" in url:
-        sheet_id = url.split("/d/")[1].split("/")[0]
-        return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
-    return url
 
 def fetch_csv(csv_url):
     try:
@@ -47,57 +44,48 @@ def text_to_audio(text, filename):
     tts.save(filename)
 
 def generate_video(text, audio_file, output_file):
-    width, height = 720, 480
-    fps = 1
-    duration = 5
-    font = ImageFont.truetype(FONT_PATH, 32)
-
+    font = ImageFont.truetype(FONT_PATH, 28)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    video = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+    video = cv2.VideoWriter(output_file, fourcc, FPS, (WIDTH, HEIGHT))
 
-    for _ in range(duration):
-        img = Image.new("RGB", (width, height), color=(50, 50, 50))
+    for frame_num in range(VIDEO_DURATION * FPS):
+        # Animate background colors
+        bg_color = (random.randint(20, 100), random.randint(20, 100), random.randint(20, 100))
+        img = Image.new("RGB", (WIDTH, HEIGHT), color=bg_color)
         draw = ImageDraw.Draw(img)
-        draw.text((50, height // 2 - 20), text, font=font, fill=(255, 255, 255))
+        
+        # Animate text moving horizontally
+        x_pos = (frame_num * 5) % WIDTH
+        draw.text((x_pos, HEIGHT // 2 - 20), text, font=font, fill=(255, 255, 255))
+        
         frame = np.array(img)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         video.write(frame)
 
     video.release()
 
+    # Merge audio using ffmpeg
     try:
         temp_file = "temp_" + output_file
-        (
-            ffmpeg
-            .input(output_file)
-            .output(temp_file, vcodec='copy', acodec='aac', shortest=None)
-            .overwrite_output()
-            .run(quiet=True)
-        )
-        (
-            ffmpeg
-            .input(temp_file)
-            .input(audio_file)
-            .output(output_file, vcodec='copy', acodec='aac', strict='experimental')
-            .overwrite_output()
-            .run(quiet=True)
-        )
+        ffmpeg.input(output_file).output(temp_file, vcodec='copy', acodec='aac', shortest=None).overwrite_output().run(quiet=True)
+        ffmpeg.input(temp_file).input(audio_file).output(output_file, vcodec='copy', acodec='aac', strict='experimental').overwrite_output().run(quiet=True)
         os.remove(temp_file)
     except Exception as e:
         print(f"WARN: Audio merge failed: {e}")
 
+# --- Main ---
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python automation.py <Google_Sheet_URL>")
+        print("Usage: python automation.py <CSV_URL>")
         sys.exit(1)
 
-    sheet_url = sys.argv[1]
-    csv_url = convert_sheet_to_csv(sheet_url)
+    csv_url = sys.argv[1]
     df = fetch_csv(csv_url)
 
-    # Normalize columns: strip spaces
+    # Normalize columns: strip spaces and lowercase
     df.columns = [c.strip() for c in df.columns]
 
+    # Detect columns
     topic_col = next((c for c in df.columns if 'creative problem' in c.lower()), None)
     case_col = next((c for c in df.columns if 'case study' in c.lower()), None)
     prompt_col = next((c for c in df.columns if 'video prompt' in c.lower()), None)
@@ -108,31 +96,35 @@ def main():
 
     df['index'] = df.index + 1
     start_index = read_state()
-    videos_generated = 0
 
+    videos_generated = 0
     with zipfile.ZipFile(ZIP_FILE, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for _, row in df[df['index'] >= start_index].head(MAX_VIDEOS).iterrows():
+        for _, row in df[df['index'] >= start_index].iterrows():
             idx = row['index']
             topic = row[topic_col]
             case = row[case_col]
             prompt = row[prompt_col]
 
             text_content = f"Topic: {topic}\nCase: {case}\nPrompt: {prompt}"
+
             audio_file = f"voice_{idx}.mp3"
             video_file = f"video_{idx}.mp4"
 
+            # Generate audio and video
             text_to_audio(text_content, audio_file)
             generate_video(text_content, audio_file, video_file)
 
+            # Add to ZIP
             zipf.write(video_file)
             zipf.write(audio_file)
 
+            # Cleanup
             os.remove(video_file)
             os.remove(audio_file)
 
             videos_generated += 1
             start_index = idx + 1
-            break
+            break  # Only one video at a time
 
     write_state(start_index)
     print({
