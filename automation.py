@@ -101,6 +101,6 @@ def main(csv_path):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python video_generator.py <your_csv_file>")
+        print("Usage: python automation.py <your_csv_file>")
         sys.exit(1)
     main(sys.argv[1])
