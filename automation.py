@@ -27,6 +27,12 @@ def write_state(value):
     with open(STATE_FILE, "w") as f:
         f.write(str(value))
 
+def convert_sheet_to_csv(url):
+    if "/edit" in url:
+        sheet_id = url.split("/d/")[1].split("/")[0]
+        return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+    return url
+
 def fetch_csv(csv_url):
     try:
         r = requests.get(csv_url)
@@ -42,8 +48,8 @@ def text_to_audio(text, filename):
 
 def generate_video(text, audio_file, output_file):
     width, height = 720, 480
-    fps = 1  # 1 frame per second for simplicity
-    duration = 5  # seconds
+    fps = 1
+    duration = 5
     font = ImageFont.truetype(FONT_PATH, 32)
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -59,13 +65,12 @@ def generate_video(text, audio_file, output_file):
 
     video.release()
 
-    # Merge audio
     try:
         temp_file = "temp_" + output_file
         (
             ffmpeg
             .input(output_file)
-            .output(temp_file, vcodec='copy', acodec='aac', audio_bitrate='192k', shortest=None)
+            .output(temp_file, vcodec='copy', acodec='aac', shortest=None)
             .overwrite_output()
             .run(quiet=True)
         )
@@ -83,42 +88,51 @@ def generate_video(text, audio_file, output_file):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python automation.py <CSV_URL>")
+        print("Usage: python automation.py <Google_Sheet_URL>")
         sys.exit(1)
 
-    csv_url = sys.argv[1]
+    sheet_url = sys.argv[1]
+    csv_url = convert_sheet_to_csv(sheet_url)
     df = fetch_csv(csv_url)
+
+    # Normalize columns: strip spaces
+    df.columns = [c.strip() for c in df.columns]
+
+    topic_col = next((c for c in df.columns if 'creative problem' in c.lower()), None)
+    case_col = next((c for c in df.columns if 'case study' in c.lower()), None)
+    prompt_col = next((c for c in df.columns if 'video prompt' in c.lower()), None)
+
+    if not all([topic_col, case_col, prompt_col]):
+        print(f"ERROR: Required columns not found. Found columns: {df.columns.tolist()}")
+        sys.exit(1)
+
     df['index'] = df.index + 1
     start_index = read_state()
-
     videos_generated = 0
+
     with zipfile.ZipFile(ZIP_FILE, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for _, row in df[df['index'] >= start_index].head(MAX_VIDEOS).iterrows():
             idx = row['index']
-            topic = row['Creative Problem']
-            case = row['Case Study']
-            prompt = row['Video Prompt']
+            topic = row[topic_col]
+            case = row[case_col]
+            prompt = row[prompt_col]
 
             text_content = f"Topic: {topic}\nCase: {case}\nPrompt: {prompt}"
-
             audio_file = f"voice_{idx}.mp3"
             video_file = f"video_{idx}.mp4"
 
-            # Generate audio and video
             text_to_audio(text_content, audio_file)
             generate_video(text_content, audio_file, video_file)
 
-            # Add to ZIP
             zipf.write(video_file)
             zipf.write(audio_file)
 
-            # Cleanup
             os.remove(video_file)
             os.remove(audio_file)
 
             videos_generated += 1
             start_index = idx + 1
-            break  # Only process one video at a time
+            break
 
     write_state(start_index)
     print({
@@ -126,7 +140,6 @@ def main():
         "zip_path": ZIP_FILE if videos_generated else "",
         "next_index": start_index
     })
-
 
 if __name__ == "__main__":
     main()
