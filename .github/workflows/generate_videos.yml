@@ -6,21 +6,31 @@ on:
     paths: [automation.py]
 
 jobs:
-  run:
+  generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: |
+
+      - name: Install ffmpeg + fonts
+        run: |
           sudo apt update -qq
           sudo apt install -y ffmpeg fonts-dejavu-core
-      - run: pip install pandas requests edge-tts moviepy==1.0.3 pillow numpy
-      - run: python automation.py
-      - uses: actions/upload-artifact@v4
+
+      - name: Install Python packages
+        run: pip install pandas requests edge-tts moviepy==1.0.3 pillow numpy
+
+      - name: Run video generator
+        run: python automation.py
+
+      - name: Upload videos
+        uses: actions/upload-artifact@v4
         with:
-          name: YouTube-Shorts-Ready
+          name: YouTube-Shorts-Ready-${{ github.run_number }}
           path: |
             *.mp4
             thumbnails/
+          retention-days: 30
