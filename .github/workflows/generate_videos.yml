@@ -21,9 +21,10 @@ jobs:
           sudo apt install -y ffmpeg fonts-dejavu-core
 
       - name: Install Python packages
-        run: pip install pandas requests edge-tts moviepy==1.0.3 pillow numpy
+        run: |
+          pip install pandas requests edge-tts moviepy==1.0.3 pillow numpy
 
-      - name: Run video generator
+      - name: Run generator
         run: python automation.py
 
       - name: Upload videos
