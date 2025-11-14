@@ -1,19 +1,37 @@
-name: Generate YouTube Shorts
-on: [workflow_dispatch, push]
+name: Generate YouTube Short
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */8 * * *'  # Optional: runs every 8 hours
+
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: sudo apt update -qq && sudo apt install -y ffmpeg fonts-dejavu-core
-      - run: pip install pandas requests gtts moviepy==1.0.3 pillow numpy
-      - run: python automation.py
-      - uses: actions/upload-artifact@v4
+
+      - name: Install ffmpeg + fonts
+        run: |
+          sudo apt update -qq
+          sudo apt install -y ffmpeg fonts-dejavu-core
+
+      - name: Install packages
+        run: |
+          pip install gtts moviepy==1.0.3 pillow numpy requests
+
+      - name: Run generator
+        run: python automation.py
+
+      - name: Upload videos
+        uses: actions/upload-artifact@v4
         with:
           name: YouTube-Shorts-Ready
           path: |
             *.mp4
             thumbnails/
+          retention-days: 30
