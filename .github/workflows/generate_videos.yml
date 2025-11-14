@@ -1,37 +1,19 @@
 name: Generate YouTube Shorts
-
-on:
-  workflow_dispatch:
-  push:
-    paths: [automation.py]
-
+on: [workflow_dispatch, push]
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install ffmpeg + fonts
-        run: |
-          sudo apt update -qq
-          sudo apt install -y ffmpeg fonts-dejavu-core
-
-      - name: Install packages
-        run: |
-          pip install pandas requests edge-tts "moviepy==1.0.3" pillow numpy
-
-      - name: Run generator
-        run: python automation.py
-
-      - name: Upload videos
-        uses: actions/upload-artifact@v4
+      - run: sudo apt update -qq && sudo apt install -y ffmpeg fonts-dejavu-core
+      - run: pip install pandas requests gtts moviepy==1.0.3 pillow numpy
+      - run: python automation.py
+      - uses: actions/upload-artifact@v4
         with:
-          name: YouTube-Shorts-${{ github.run_number }}
+          name: YouTube-Shorts-Ready
           path: |
             *.mp4
             thumbnails/
-          retention-days: 30
