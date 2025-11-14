@@ -1,6 +1,6 @@
 pandas
 requests
-edge-tts
+edge-tts>=6.1
 moviepy==1.0.3
-pillow
+pillow>=10.0.0
 numpy
