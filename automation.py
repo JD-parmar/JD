@@ -1,22 +1,20 @@
-# automation.py – 100% WORKING ON GITHUB ACTIONS (November 2025)
+# automation.py – 100% WORKING YouTube Shorts Generator (2025)
 import os
 import requests
 import numpy as np
 from moviepy.editor import *
 from PIL import Image, ImageDraw, ImageFont
 from gtts import gTTS
-import time
 
 # CONFIG
 STATE_FILE = "state.txt"
 W, H = 1080, 1920
-DURATION = 58
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 BG_URL = "https://videos.pexels.com/video-files/855564/855564-hd_1080_1920_30fps.mp4"
 
 TOPICS = [
-    {"problem": "Water scarcity", "text": "A village in Rajasthan had no water for decades. They revived ancient johads and built underground tanks. Now they have water all year round. This is real and still working in 2025."},
-    {"problem": "Education access", "text": "Children walked 4 hours through snow to reach school. Now solar-powered classrooms with tablets bring education to remote Himalayan villages at night. This is real and still working in 2025."},
+    {"problem": "Water scarcity", "text": "A village in Rajasthan had no water for decades. They revived ancient johads and built underground tanks. Now they have water all year round. Real solution still working in 2025."},
+    {"problem": "Education access", "text": "Children walked 4 hours through snow to reach school. Now solar-powered classrooms with tablets bring education to remote Himalayan villages at night. Real and working today."},
     {"problem": "Traffic congestion", "text": "Mumbai reduced traffic jams by 40% using AI traffic lights that detect crowds in real time. Chaos turned into smooth roads. This is real and still working in 2025."}
 ]
 
@@ -29,15 +27,13 @@ def save_state(n):
 def next_topic():
     idx = get_state()
     if idx >= len(TOPICS):
-        print("All videos generated!")
+        print("All 3 videos done!")
         exit(0)
     save_state(idx + 1)
     return TOPICS[idx], idx + 1
 
 def speak(text):
-    tts = gTTS(text=text, lang='en', slow=False)
-    tts.save("voice.mp3")
-    time.sleep(1)  # prevent rate limit
+    gTTS(text=text, lang='en', slow=False).save("voice.mp3")
 
 def download_bg():
     try:
@@ -73,7 +69,7 @@ def create_subtitle(text):
         draw.text((x, y), line, font=font, fill="white", stroke_width=8, stroke_fill="black")
         y += 130
 
-    return ImageClip(np.array(img)).set_duration(5).set_position(("center", 0.68 * H))
+    return ImageClip(np.array(img)).set_position(("center", 0.68 * H))
 
 def main():
     os.makedirs("thumbnails", exist_ok=True)
@@ -82,15 +78,16 @@ def main():
 
     print(f"Generating Short #{num}: {topic['problem']}")
 
-    # 1. Voice (gTTS – 100% working)
+    # 1. Voice
     speak(script)
-    audio = AudioFileClip("voice.mp3").set_duration(DURATION)
+    audio = AudioFileClip("voice.mp3")
+    duration = audio.duration
 
     # 2. Background
-    bg = ColorClip(size=(W, H), color=(10, 20, 50), duration=DURATION)
+    bg = ColorClip((W, H), color=(10, 20, 50), duration=duration)
     if download_bg():
         try:
-            vid = VideoFileClip("bg.mp4").subclip(0, DURATION).resize(height=H)
+            vid = VideoFileClip("bg.mp4").subclip(0, duration).resize(height=H)
             if vid.w > W:
                 vid = vid.crop(x_center=vid.w//2, width=W)
             bg = vid
@@ -102,7 +99,7 @@ def main():
     for i in range(0, len(script), 68):
         chunk = script[i:i+68].strip()
         if chunk:
-            sub = create_subtitle(chunk).set_start(i * 0.27).fadein(0.4).fadeout(0.4)
+            sub = create_subtitle(chunk).set_start(i * 0.27).set_duration(5).fadein(0.4).fadeout(0.4)
             subs.append(sub)
 
     # 4. Final video
@@ -112,15 +109,16 @@ def main():
                           preset="ultrafast", threads=6, verbose=False, logger=None)
 
     # 5. Thumbnail
-    frame = bg.get_frame(10)
+    frame = bg.get_frame(min(8, duration-1))
     img = Image.fromarray(frame)
     draw = ImageDraw.Draw(img)
-    bigfont = ImageFont.truetype(FONT, 140)
-    draw.text((80, 80), topic["problem"].upper(), fill="white", font=bigfont, stroke_width=12, stroke_fill="black")
-    draw.text((80, 300), "SOLVED", fill=(255, 215, 0), font=bigfont, stroke_width=12, stroke_fill="black")
+    big = ImageFont.truetype(FONT, 140)
+    draw.text((80, 80), topic["problem"].upper(), fill="white", font=big, stroke_width=12, stroke_fill="black")
+    draw.text((80, 300), "SOLVED", fill=(255, 215, 0), font=big, stroke_width=12, stroke_fill="black")
     img.save(f"thumbnails/thumb_{num}.jpg")
 
-    print(f"SUCCESS! {output} is ready for YouTube Shorts!")
+    print(f"SUCCESS! {output} ({duration:.1f}s) READY!")
 
 if __name__ == "__main__":
     main()
+    
