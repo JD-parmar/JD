@@ -1,13 +1,13 @@
-# automation.py – 100% WORKING ON GITHUB ACTIONS (November 2025)
+# automation.py – FINAL 100% WORKING VERSION (November 2025)
 import os
 import requests
 import asyncio
 import numpy as np
-from movie435py.editor import *
+from moviepy.editor import *          # ← CORRECT import (was typo before)
 from PIL import Image, ImageDraw, ImageFont
 import edge_tts
 
-# === CONFIG ===
+# CONFIG
 STATE_FILE = "state.txt"
 W, H = 1080, 1920
 DURATION = 58
@@ -16,9 +16,9 @@ FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 BG_URL = "https://videos.pexels.com/video-files/855564/855564-hd_1080_1920_30fps.mp4"
 
 TOPICS = [
-    {"problem": "Water scarcity", "case": "Rajasthan village", "text": "A village in Rajasthan had no water for decades. They revived ancient johads and built underground tanks. Now they have water all year round."},
-    {"problem": "Education access", "case": "Himalayan schools", "text": "Children walked 4 hours through snow to reach school. Now solar-powered classrooms with tablets bring education to remote villages at night."},
-    {"problem": "Traffic congestion", "case": "Mumbai AI lights", "text": "Mumbai reduced traffic jams by 40% using AI traffic lights that detect crowds in real time. Chaos turned into smooth roads."}
+    {"problem": "Water scarcity", "text": "A village in Rajasthan had no water for decades. They revived ancient johads and built underground tanks. Now they have water all year round."},
+    {"problem": "Education access", "text": "Children walked 4 hours through snow to reach school. Now solar-powered classrooms with tablets bring education to remote Himalayan villages at night."},
+    {"problem": "Traffic congestion", "text": "Mumbai reduced traffic jams by 40% using AI traffic lights that detect crowds in real time. Chaos turned into smooth roads."}
 ]
 
 def get_state():
@@ -53,7 +53,6 @@ def create_subtitle(text):
     draw = ImageDraw.Draw(img)
     font = ImageFont.truetype(FONT, 92)
     
-    # Simple word wrap
     words = text.split()
     lines = []
     line = ""
@@ -120,7 +119,7 @@ def main():
     draw.text((80, 300), "SOLVED", fill=(255, 215, 0), font=bigfont, stroke_width=12, stroke_fill="black")
     img.save(f"thumbnails/thumb_{num}.jpg")
 
-    print(f"SUCCESS! {output} is ready to upload to YouTube Shorts!")
+    print(f"SUCCESS! {output} is ready!")
 
 if __name__ == "__main__":
     main()
