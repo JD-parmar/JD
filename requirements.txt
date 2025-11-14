@@ -1,8 +1,5 @@
 pandas
-numpy
-gtts
-opencv-python
-Pillow
-mutagen
 requests
-ffmpeg-python
+edge-tts>=6.1
+moviepy==1.0.3
+Pillow
