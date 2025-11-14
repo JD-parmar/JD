@@ -1,5 +1,5 @@
-name: Auto YouTube Shorts from Google Sheet
-on: [workflow_dispatch, push]
+name: Generate YouTube Shorts from Google Sheet
+on: [workflow_dispatch]
 
 jobs:
   generate:
