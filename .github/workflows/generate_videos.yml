@@ -1,42 +1,20 @@
-name: Generate YouTube Shorts from Google Sheet
-
-on:
-  workflow_dispatch:        # You can run manually
-  schedule:
-    - cron: '0 */6 * * *'   # Optional: auto-run every 6 hours
+name: Auto YouTube Shorts from Google Sheet
+on: [workflow_dispatch, push]
 
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install system dependencies (ffmpeg + fonts)
-        run: |
-          sudo apt update -qq
-          sudo apt install -y ffmpeg fonts-dejavu-core
-
-      - name: Install Python packages
-        run: |
-          pip install pandas requests gtts moviepy==1.0.3 pillow numpy
-
-      - name: Run automation script
-        run: python automation.py
-
-      - name: Upload generated Shorts & thumbnails
-        uses: actions/upload-artifact@v4
+      - run: sudo apt update -qq && sudo apt install -y ffmpeg fonts-dejavu-core
+      - run: pip install pandas requests gtts moviepy==1.0.3 pillow numpy
+      - run: python automation.py
+      - uses: actions/upload-artifact@v4
         with:
-          name: YouTube-Shorts-Ready-${{ github.run_number }}
+          name: YouTube-Shorts-Ready
           path: |
             *.mp4
             thumbnails/
-          retention-days: 30
-          if-no-files-found: warn
