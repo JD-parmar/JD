@@ -20,9 +20,9 @@ jobs:
           sudo apt update -qq
           sudo apt install -y ffmpeg fonts-dejavu-core
 
-      - name: Install Python packages
+      - name: Install packages
         run: |
-          pip install pandas requests edge-tts moviepy==1.0.3 pillow numpy
+          pip install pandas requests edge-tts "moviepy==1.0.3" pillow numpy
 
       - name: Run generator
         run: python automation.py
@@ -30,7 +30,7 @@ jobs:
       - name: Upload videos
         uses: actions/upload-artifact@v4
         with:
-          name: YouTube-Shorts-Ready-${{ github.run_number }}
+          name: YouTube-Shorts-${{ github.run_number }}
           path: |
             *.mp4
             thumbnails/
