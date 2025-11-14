@@ -1,4 +1,4 @@
-# automation.py — FINAL VERSION THAT NEVER FAILS (November 2025)
+# automation.py — FINAL VERSION THAT WORKS WITH YOUR SHEET (November 2025)
 import os
 import pandas as pd
 import requests
@@ -27,24 +27,24 @@ def load_sheet():
         r = requests.get(CSV_URL, timeout=30)
         r.raise_for_status()
         df = pd.read_csv(io.StringIO(r.text))
-        print("Columns found:", list(df.columns))
-        df.columns = [col.strip() for col in df.columns]
+        print("Raw columns:", list(df.columns))
         
-        # Auto-detect columns
-        col_map = {}
-        for col in df.columns:
-            lower = col.lower()
-            if "problem" in lower: col_map["problem"] = col
-            if "case" in lower: col_map["case"] = col
-            if "prompt" in lower or "script" in lower: col_map["prompt"] = col
+        # Fix exact column names from your sheet
+        df = df.rename(columns={
+            "Creative Problem": "problem",
+            "Case Study": "case",
+            "Video Prompt (exact script for AI voice)": "prompt"
+        }).rename(columns=lambda x: x.strip())
         
-        df = df.rename(columns=col_map)
-        df = df.dropna(subset=["problem", "case", "prompt"])
+        df = df[["problem", "case", "prompt"]]
+        df = df.dropna()
         df = df[df["problem"].astype(str).str.strip() != ""]
+        df = df.reset_index(drop=True)
+        
         print(f"Loaded {len(df)} valid rows")
-        return df[["problem", "case", "prompt"]]
+        return df
     except Exception as e:
-        print(f"Sheet error: {e}")
+        print(f"ERROR loading sheet: {e}")
         exit(1)
 
 def speak(text):
@@ -89,7 +89,7 @@ def main():
     idx = get_state()
     
     if idx >= len(df):
-        print("All done! Add more rows.")
+        print("All Shorts generated! Add more rows to your sheet.")
         exit(0)
     
     row = df.iloc[idx]
@@ -120,16 +120,17 @@ def main():
             subs.append(sub)
     
     final = CompositeVideoClip([bg] + subs).set_audio(audio)
-    safe_name = "".join(c if c.isalnum() else "_" for c in problem)[:20]
+    safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in problem)[:20]
     output = f"Short_{idx+1}_{safe_name}.mp4"
     
     final.write_videofile(output, fps=30, codec="libx264", audio_codec="aac",
                           preset="ultrafast", threads=6, verbose=False, logger=None)
     
-    # FIXED: Convert frame to uint8 before PIL
+    # FIXED: Convert frame to uint8
     try:
         frame = bg.get_frame(min(8, duration-1))
-        frame = np.uint8(frame)  # ← THIS FIXES THE ERROR
+        if frame.dtype != np.uint8:
+            frame = (frame * 255).astype(np.uint8) if frame.max() <= 1.0 else frame.astype(np.uint8)
         img = Image.fromarray(frame)
         draw = ImageDraw.Draw(img)
         big = ImageFont.truetype(FONT, 130)
@@ -137,10 +138,10 @@ def main():
         draw.text((80,280), "SOLVED", fill=(255,215,0), font=big, stroke_width=12, stroke_fill="black")
         img.save(f"thumbnails/thumb_{idx+1}.jpg")
     except Exception as e:
-        print(f"Thumbnail failed: {e}")
+        print(f"Thumbnail skipped: {e}")
     
     save_state(idx + 1)
-    print(f"SUCCESS! {output} READY! ({duration:.1f}s)")
+    print(f"SUCCESS! {output} READY ({duration:.1f}s)")
 
 if __name__ == "__main__":
     main()
