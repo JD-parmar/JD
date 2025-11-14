@@ -1,4 +1,4 @@
-# automation.py — FINAL CLEAN & BULLETPROOF VERSION (November 2025)
+# automation.py — FINAL VERSION THAT WORKS WITH ANY SHEET (November 2025)
 import os
 import pandas as pd
 import requests
@@ -27,21 +27,43 @@ def load_sheet():
         r = requests.get(CSV_URL, timeout=30)
         r.raise_for_status()
         df = pd.read_csv(io.StringIO(r.text))
-        df.columns = [col.strip() for col in df.columns]
-        df = df.dropna(subset=["Creative Problem", "Case Study", "Video Prompt"])
-        df = df[df["Creative Problem"].str.strip() != ""]
-        print(f"Loaded {len(df)} valid rows from your Google Sheet")
-        return df
+        
+        # Print columns to debug
+        print("Columns found in sheet:", list(df.columns))
+        
+        # Clean column names
+        df.columns = [col.strip().replace(" ", "_") for col in df.columns]
+        
+        # Auto-detect column names (case-insensitive)
+        col_map = {}
+        for col in df.columns:
+            lower = col.lower()
+            if "problem" in lower: col_map["problem"] = col
+            if "case" in lower: col_map["case"] = col
+            if "prompt" in lower or "script" in lower: col_map["prompt"] = col
+        
+        if len(col_map) < 3:
+            print("Could not find all required columns. Need: Problem, Case Study, Prompt")
+            exit(1)
+            
+        df = df.rename(columns={
+            col_map["problem"]: "problem",
+            col_map["case"]: "case",
+            col_map["prompt"]: "prompt"
+        })
+        
+        df = df.dropna(subset=["problem", "case", "prompt"])
+        df = df[df["problem"].astype(str).str.strip() != ""]
+        
+        print(f"Successfully loaded {len(df)} valid rows")
+        return df[["problem", "case", "prompt"]]
+        
     except Exception as e:
-        print(f"Error loading sheet: {e}")
+        print(f"Failed to load or parse Google Sheet: {e}")
         exit(1)
 
 def speak(text):
-    try:
-        gTTS(text=text, lang='en', slow=False).save("voice.mp3")
-    except:
-        print("gTTS failed — using silent fallback")
-        AudioClip(lambda t: [0], duration=15).write_audiofile("voice.mp3", fps=44100, logger=None)
+    gTTS(text=text, lang='en', slow=False).save("voice.mp3")
 
 def download_bg():
     try:
@@ -49,106 +71,88 @@ def download_bg():
         if len(r.content) > 1_000_000:
             open("bg.mp4", "wb").write(r.content)
             return True
-    except:
-        pass
+    except: pass
     return False
 
 def create_subtitle(text):
     img = Image.new("RGBA", (W, 600), (0,0,0,0))
     draw = ImageDraw.Draw(img)
-    try:
-        font = ImageFont.truetype(FONT, 88)
-    except:
-        font = ImageFont.load_default()
-
+    font = ImageFont.truetype(FONT, 88)
+    
     words = text.split()
-    lines = []
-    line = ""
-    for word in words:
-        test = line + word + " "
-        if draw.textlength(test, font) < W - 200:
-            line = test
+    lines, line = [], ""
+    for w in words:
+        if draw.textlength(line + w + " ", font) < W - 200:
+            line += w + " "
         else:
             lines.append(line.strip())
-            line = word + " "
-    if line:
-        lines.append(line.strip())
-
+            line = w + " "
+    if line: lines.append(line.strip())
+    
     y = 120
-    for line in lines[:4]:
-        try:
-            bbox = draw.textbbox((0, 0), line, font=font)
-            x = (W - (bbox[2] - bbox[0])) // 2
-        except:
-            x = 100
-        draw.text((x, y), line, font=font, fill="white", stroke_width=8, stroke_fill="black")
+    for l in lines[:4]:
+        bbox = draw.textbbox((0, 0), l, font=font)
+        x = (W - (bbox[2] - bbox[0])) // 2
+        draw.text((x, y), l, font=font, fill="white", stroke_width=8, stroke_fill="black")
         y += 130
-
+    
     return ImageClip(np.array(img)).set_position(("center", 0.68 * H))
 
 def main():
     os.makedirs("thumbnails", exist_ok=True)
     df = load_sheet()
     idx = get_state()
-
+    
     if idx >= len(df):
-        print("All rows processed! Add more to your sheet.")
+        print("All Shorts generated! Add more rows to your sheet.")
         exit(0)
-
+    
     row = df.iloc[idx]
-    problem = str(row["Creative Problem"]).strip()
-    case = str(row["Case Study"]).strip()
-    prompt = str(row["Video Prompt"]).strip()
-
-    script = f"{prompt} This actually happened in {case} and it's still working in 2025."
-
+    problem = str(row["problem"]).strip()
+    case = str(row["case"]).strip()
+    prompt = str(row["prompt"]).strip()
+    
+    script = f"{prompt} This really happened in {case} and it's still working today."
+    
     print(f"Generating Short #{idx+1}: {problem}")
-
-    # Voice
+    
     speak(script)
     audio = AudioFileClip("voice.mp3")
     duration = audio.duration
-
-    # Background
-    bg = ColorClip((W, H), color=(10, 20, 50), duration=duration)
+    
+    bg = ColorClip((W, H), color=(10,20,50), duration=duration)
     if download_bg():
         try:
             vid = VideoFileClip("bg.mp4").subclip(0, duration).resize(height=H)
-            if vid.w > W:
-                vid = vid.crop(x_center=vid.w//2, width=W)
+            if vid.w > W: vid = vid.crop(x_center=vid.w//2, width=W)
             bg = vid
-        except:
-            print("Using solid background")
-
-    # Subtitles
+        except: pass
+    
     subs = []
     for i in range(0, len(script), 68):
         chunk = script[i:i+68].strip()
         if chunk:
-            sub = create_subtitle(chunk).set_start(i * 0.27).set_duration(5).fadein(0.4).fadeout(0.4)
+            sub = create_subtitle(chunk).set_start(i*0.27).set_duration(5).fadein(0.4).fadeout(0.4)
             subs.append(sub)
-
-    # Final video
+    
     final = CompositeVideoClip([bg] + subs).set_audio(audio)
-    safe_name = "".join(c if c.isalnum() or c in "_-" else "_" for c in problem)[:25]
+    safe_name = "".join(c if c.isalnum() else "_" for c in problem)[:20]
     output = f"Short_{idx+1}_{safe_name}.mp4"
+    
     final.write_videofile(output, fps=30, codec="libx264", audio_codec="aac",
                           preset="ultrafast", threads=6, verbose=False, logger=None)
-
+    
     # Thumbnail
-    try:
-        frame = bg.get_frame(min(8, duration-1))
-        img = Image.fromarray(frame)
-        draw = ImageDraw.Draw(img)
-        big = ImageFont.truetype(FONT, 130)
-        draw.text((80, 80), problem.upper(), fill="white", font=big, stroke_width=12, stroke_fill="black")
-        draw.text((80, 280), "SOLVED", fill=(255, 215, 0), font=big, stroke_width=12, stroke_fill="black")
-        img.save(f"thumbnails/thumb_{idx+1}.jpg")
-    except:
-        pass
-
+    frame = bg.get_frame(min(8, duration-1))
+    img = Image.fromarray(frame)
+    draw = ImageDraw.Draw(img)
+    big = ImageFont.truetype(FONT, 130)
+    draw.text((80,80), problem.upper(), fill="white", font=big, stroke_width=12, stroke_fill="black")
+    draw.text((80,280), "SOLVED", fill=(255,215,0), font=big, stroke_width=12, stroke_fill="black")
+    img.save(f"thumbnails/thumb_{idx+1}.jpg")
+    
     save_state(idx + 1)
-    print(f"SUCCESS! {output} ({duration:.1f}s) READY FOR YOUTUBE!")
+    print(f"SUCCESS! {output} is ready! ({duration:.1f}s)")
 
 if __name__ == "__main__":
     main()
