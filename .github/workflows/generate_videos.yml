@@ -1,6 +1,9 @@
-name: Generate YouTube Shorts
+name: Generate Daily Trending YouTube Short
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * *'  # Runs daily at 5:00 AM UTC (~10:30 AM IST)
 
 jobs:
   generate:
@@ -16,7 +19,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install deps
+      - name: Install system & Python deps
         run: |
           sudo apt update -qq
           sudo apt install -y ffmpeg fonts-dejavu-core
@@ -25,10 +28,10 @@ jobs:
       - name: Run generator
         run: python automation.py
 
-      - name: Upload Shorts
+      - name: Upload Short + Thumbnail
         uses: actions/upload-artifact@v4
         with:
-          name: YouTube-Shorts-Ready
+          name: YouTube-Short-Ready
           path: |
             *.mp4
             thumbnails/
