@@ -1,18 +1,32 @@
-name: Generate YouTube Shorts from Google Sheet
+name: Generate YouTube Shorts
+
 on: [workflow_dispatch]
 
 jobs:
   generate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: sudo apt update -qq && sudo apt install -y ffmpeg fonts-dejavu-core
-      - run: pip install pandas requests gtts moviepy==1.0.3 pillow numpy
-      - run: python automation.py
-      - uses: actions/upload-artifact@v4
+
+      - name: Install deps
+        run: |
+          sudo apt update -qq
+          sudo apt install -y ffmpeg fonts-dejavu-core
+          pip install pandas requests gtts moviepy==1.0.3 pillow numpy
+
+      - name: Run generator
+        run: python automation.py
+
+      - name: Upload Shorts
+        uses: actions/upload-artifact@v4
         with:
           name: YouTube-Shorts-Ready
           path: |
