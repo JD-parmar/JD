@@ -1,34 +1,38 @@
 #!/usr/bin/env python3
 """
-YouTube Shorts Generator – CSV → Pro MP4 + Thumbnail
-Uses: Pexels photos/videos, gTTS, MoviePy, Pillow
+Daily Trending YouTube Short Generator
+Date: November 15, 2025 | 10:54 AM IST
+Topic: Bihar Election 2025 – NDA Landslide Victory!
 """
 
 import os
-import io
+import re
 import requests
 import numpy as np
-import pandas as pd
+from datetime import datetime
 from moviepy.editor import *
 from PIL import Image, ImageDraw, ImageFont
 from gtts import gTTS
-import re
 
 # ----------------------------------------------------------------------
 # CONFIG
 # ----------------------------------------------------------------------
-CSV_DATA = """Creative Problem,Case Study,Video Prompt
-Water scarcity,Rajasthan village initiative,A remote village in Rajasthan was dying of thirst until locals built underground taankas and revived ancient johads – show dramatic before/after, dusty land turning green, happy women carrying less water
-Education access,Himalayan schools,In the freezing Himalayas, children walked hours through snow to study – now solar-powered classrooms with tablets light up remote villages at night, show kids smiling in warm glowing rooms
-Traffic congestion,Mumbai smart traffic lights,Mumbai’s insane traffic jams were cut by 40% using AI traffic lights that detect crowds in real-time – show chaotic old footage vs smooth flowing roads today, honking reduced
-"""
-
 STATE_FILE = "state.txt"
 W, H = 1080, 1920
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-PEXELS_API = "https://api.pexels.com/v1/search"
-PEXELS_VIDEO_API = "https://api.pexels.com/videos/search"
-HEADERS = {"Authorization": "563492ad6f91700001000001e3e3d3e3e3e3e3e3e3e3e3e3e3e3"}  # Free Pexels key (public)
+PEXELS_SEARCH = "https://api.pexels.com/v1/search"
+PEXELS_VIDEO = "https://api.pexels.com/videos/search"
+HEADERS = {"Authorization": "563492ad6f91700001000001e3e3d3e3e3e3e3e3e3e3e3e3e3e3"}  # Public Pexels key
+
+# TODAY'S TRENDING TOPIC (Nov 15, 2025)
+TOPIC = "Bihar Election 2025 NDA Landslide Victory"
+CASE = "Patna, Bihar"
+PROMPT = (
+    "Bihar just delivered a historic verdict – NDA led by Nitish Kumar and BJP wins 210+ seats in a massive landslide. "
+    "From caste alliances to Modi's rallies, this is a game-changer. Dusty rallies turned into victory celebrations – "
+    "show dramatic crowd footage, cheering supporters, and NDA leaders waving from stages. "
+    "This happened in Patna, Bihar on November 15, 2025 – and it's trending across India!"
+)
 
 # ----------------------------------------------------------------------
 def get_state():
@@ -37,52 +41,44 @@ def get_state():
 def save_state(n):
     open(STATE_FILE, "w").write(str(n))
 
-def load_sheet():
-    df = pd.read_csv(io.StringIO(CSV_DATA))
-    df = df.rename(columns=lambda x: x.strip())
-    df = df.rename(columns={
-        "Creative Problem": "problem",
-        "Case Study": "case",
-        "Video Prompt": "prompt"
-    })
-    df = df[["problem", "case", "prompt"]].dropna().reset_index(drop=True)
-    print(f"Loaded {len(df)} rows")
-    return df
-
 def speak(text):
     gTTS(text=text, lang='en', slow=False).save("voice.mp3")
 
-def download_media(query, is_video=False, duration_needed=10):
-    url = PEXELS_VIDEO_API if is_video else PEXELS_API
-    params = {"query": query, "per_page": 3, "orientation": "portrait"}
+def download_media(query, is_video=False, duration=10):
+    url = PEXELS_VIDEO if is_video else PEXELS_SEARCH
+    params = {"query": query, "per_page": 5, "orientation": "portrait"}
     try:
         r = requests.get(url, headers=HEADERS, params=params, timeout=15)
         data = r.json()
-        items = data.get("videos", data.get("photos", []))
+        items = data.get("videos") or data.get("photos", [])
         for item in items:
-            src = item["video_files" if is_video else "src"]["original" if is_video else "large"]
+            files = item.get("video_files") or [item["src"]]
+            src = next((f["link"] for f in files if "hd" in f.get("file_type", "") or "portrait" in f.get("file_type", "")), None)
+            if not src:
+                src = item["src"]["original"] if not is_video else files[0]["link"]
             r2 = requests.get(src, timeout=30)
-            if len(r2.content) > 500_000:
-                ext = ".mp4" if is_video else ".jpg"
-                path = f"media_{query.replace(' ', '_')}{ext}"
-                open(path, "wb").write(r2.content)
-                if is_video:
-                    clip = VideoFileClip(path).subclip(0, min(duration_needed, VideoFileClip(path).duration))
-                    clip.write_videofile(path, fps=30, codec="libx264", logger=None)
-                return path
-    except: pass
+            if len(r2.content) < 100_000: continue
+            ext = ".mp4" if is_video else ".jpg"
+            path = f"media_{query.replace(' ', '_')[:20]}{ext}"
+            open(path, "wb").write(r2.content)
+            if is_video:
+                clip = VideoFileClip(path).subclip(0, min(duration, VideoFileClip(path).duration))
+                clip.write_videofile(path, codec="libx264", fps=30, logger=None)
+            return path
+    except Exception as e:
+        print(f"Download failed for '{query}': {e}")
     return None
 
 def create_subtitle(text, fontsize=88):
     img = Image.new("RGBA", (W, 600), (0,0,0,0))
     draw = ImageDraw.Draw(img)
     font = ImageFont.truetype(FONT, fontsize)
-    lines = []
     words = text.split()
-    line = ""
+    lines, line = [], ""
     for w in words:
-        if draw.textlength(line + w + " ", font=font) < W - 200:
-            line += w + " "
+        test = line + w + " "
+        if draw.textlength(test, font=font) < W - 200:
+            line = test
         else:
             lines.append(line.strip())
             line = w + " "
@@ -95,68 +91,80 @@ def create_subtitle(text, fontsize=88):
         y += 130
     return ImageClip(np.array(img)).set_position(("center", 0.68 * H))
 
-def make_thumbnail(frame, problem):
+def make_thumbnail(frame, title):
     if frame.dtype != np.uint8:
         frame = (frame * 255).astype(np.uint8) if frame.max() <= 1.0 else frame.astype(np.uint8)
     img = Image.fromarray(frame)
     draw = ImageDraw.Draw(img)
-    big = ImageFont.truetype(FONT, 130)
-    draw.text((80, 80), problem.upper(), fill="white", font=big, stroke_width=12, stroke_fill="black")
-    draw.text((80, 280), "SOLVED", fill=(255,215,0), font=big, stroke_width=12, stroke_fill="black")
+    big = ImageFont.truetype(FONT, 110)
+    small = ImageFont.truetype(FONT, 80)
+    draw.text((80, 80), title.upper(), fill="white", font=big, stroke_width=12, stroke_fill="black")
+    draw.text((80, 280), "NDA WINS BIHAR!", fill=(255,215,0), font=small, stroke_width=10, stroke_fill="black")
     return img
 
 # ----------------------------------------------------------------------
 def main():
     os.makedirs("thumbnails", exist_ok=True)
-    df = load_sheet()
     idx = get_state()
-    if idx >= len(df):
-        print("All done!")
+    if idx > 0:
+        print("Today's Short already generated!")
         return
 
-    row = df.iloc[idx]
-    problem = row["problem"]
-    case = row["case"]
-    prompt = row["prompt"]
-
-    # Extract keywords
-    before_kw = re.search(r"before.*?,", prompt.lower() + ",")
-    after_kw = re.search(r"after.*?,|green|smooth|glowing", prompt.lower())
-    before_kw = before_kw.group().split(",")[0].replace("before", "").strip() if before_kw else problem
-    after_kw = after_kw.group().split(",")[0].strip() if after_kw else case
-
-    script = f"{prompt} This really happened in {case} and it's still working today."
-    print(f"Generating Short #{idx+1}: {problem}")
+    script = PROMPT
+    print(f"Generating Trending Short: {TOPIC}")
 
     # Voice
     speak(script)
     audio = AudioFileClip("voice.mp3")
     duration = audio.duration
-
-    # Download visuals
-    before_media = download_media(f"{before_kw} drought", is_video=False) or download_media("desert village", is_video=True)
-    after_media = download_media(f"{after_kw} green", is_video=False) or download_media("happy village", is_video=True)
-
-    clips = []
     half = duration / 2
 
-    # Before clip
-    if before_media and before_media.endswith(".mp4"):
-        clip = VideoFileClip(before_media).subclip(0, half).resize(height=H)
-    else:
-        img = Image.open(before_media or "fallback_before.jpg")
-        clip = ImageClip(np.array(img)).set_duration(half).resize(height=H)
-    if clip.w > W: clip = clip.crop(x_center=clip.w//2, width=W)
-    clips.append(clip)
+    # Download visuals
+    before_media = download_media("election rally crowd india", is_video=True, duration=half) or \
+                   download_media("political rally dusty", is_video=False)
+    after_media = download_media("nda victory celebration", is_video=True, duration=half) or \
+                  download_media("supporters cheering bjp", is_video=False)
 
-    # After clip
-    if after_media and after_media.endswith(".mp4"):
-        clip = VideoFileClip(after_media).subclip(0, half).resize(height=H)
-    else:
-        img = Image.open(after_media or "fallback_after.jpg")
-        clip = ImageClip(np.array(img)).set_duration(half).resize(height=H)
-    if clip.w > W: clip = clip.crop(x_center=clip.w//2, width=W)
-    clips.append(clip)
+    # Fallback
+    if not before_media:
+        before_media = download_media("indian election", is_video=False)
+    if not after_media:
+        after_media = download_media("victory crowd", is_video=False)
 
-    # Concatenate
-    video = concatenate_videocl
+    # Create clips
+    def make_clip(path, dur):
+        if path.endswith(".mp4"):
+            return VideoFileClip(path).subclip(0, dur).resize(height=H).crop(x_center=W//2, width=W)
+        else:
+            return ImageClip(np.array(Image.open(path))).set_duration(dur).resize(height=H).crop(x_center=W//2, width=W)
+
+    clip1 = make_clip(before_media, half)
+    clip2 = make_clip(after_media, half)
+    video = concatenate_videoclips([clip1, clip2], method="compose")
+
+    # Subtitles
+    subs = []
+    for i in range(0, len(script), 70):
+        chunk = script[i:i+70].strip()
+        if chunk:
+            sub = create_subtitle(chunk).set_start(i * 0.27).set_duration(5).fadein(0.4).fadeout(0.4)
+            subs.append(sub)
+
+    final = CompositeVideoClip([video] + subs).set_audio(audio)
+    safe_name = "Bihar_Election_2025"
+    output = f"Short_Trending_{safe_name}.mp4"
+    final.write_videofile(output, fps=30, codec="libx264", audio_codec="aac", preset="ultrafast", threads=6, logger=None)
+
+    # Thumbnail
+    try:
+        frame = clip2.get_frame(half - 1)
+        thumb = make_thumbnail(frame, "BIHAR ELECTION 2025")
+        thumb.save(f"thumbnails/thumb_trending.jpg")
+    except Exception as e:
+        print(f"Thumbnail failed: {e}")
+
+    save_state(1)
+    print(f"SUCCESS: {output} READY ({duration:.1f}s)")
+
+if __name__ == "__main__":
+    main()
